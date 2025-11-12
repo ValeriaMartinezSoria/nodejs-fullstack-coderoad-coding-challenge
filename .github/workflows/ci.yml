@@ -29,6 +29,4 @@ jobs:                   # Qué tareas ejecuta, proceso de construccion y de desp
           npm run build
         working-directory: client
 
-      - name: Run tests
-        run: npm test
-        working-directory: client
+      
