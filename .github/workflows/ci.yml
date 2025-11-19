@@ -1,32 +1,57 @@
-name: CI Pipeline  #llave y valor
+name: CI/CD - Deploy Client & Server to EC2
 
-on:                     # Cuándo se ejecuta
-  push:     #cuando se hace un push
-    branches: [ main, dev ]  # Solo cuando hay un push en main, branch
-  pull_request: #cuando se abre un PR
+on:
+  push:
+    branches: [ main, dev ]
+  pull_request:
     branches: [ main, dev ]
 
-jobs:                   # Qué tareas ejecuta, proceso de construccion y de despliegue 
-  build:
-    runs-on: ubuntu-latest  # Máquina virtual de GitHub, "nos prestamos una maquina virtual"
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
 
-    steps:               # Pasos a ejecutar
-      - name: Checkout code  #nombre del paso
-        uses: actions/checkout@v4   # Descarga el código del repo
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4  # le decimos que instale las dependencias de node, plugging
+        uses: actions/setup-node@v4
         with:
           node-version: '20'
 
-      - name: Install dependencies
+      # ---------- CLIENT ----------
+      - name: Install client dependencies
         run: npm install
-        working-directory: client
+        working-directory: ./client
 
-      - name: Build project
-        run: |
-          npm install
-          npm run build
-        working-directory: client
+      - name: Build client
+        run: npm run build
+        working-directory: ./client
 
-      
+      # ---------- SERVER ----------
+      - name: Install server dependencies
+        run: npm install
+        working-directory: ./server
+
+      # ---------- DEPLOY TO EC2 ----------
+      - name: Copy files to EC2 (client + server)
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_KEY }}
+          source: |
+            client/dist/*
+            server/*
+          target: /var/www/myapp
+
+      - name: Restart server on EC2 (PM2)
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_KEY }}
+          script: |
+            cd /var/www/myapp/server
+            npm install --omit=dev
+            pm2 restart all || pm2 start index.js --name myapp
