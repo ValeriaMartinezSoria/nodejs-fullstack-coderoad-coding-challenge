@@ -1,34 +1,87 @@
-name: Deploy
+name: CI/CD Pipeline
 
 on:
   push:
-    branches: ["main"]
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
 
 jobs:
-  deploy:
+  build_and_deploy:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repo
-        uses: actions/checkout@v3
+      # 1. Descargar código
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-      - name: Install client deps
-        run: |
-          cd client
-          npm install
-          npm run build
+      # 2. Instalar Node.js
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
 
-      - name: Install server deps
-        run: |
-          cd server
-          npm install
+      ########################################
+      ## CLIENT (React + Vite)
+      ########################################
+      - name: Install client dependencies
+        run: npm install
+        working-directory: client
 
-      - name: Deploy dist folder
+      - name: Build client
+        run: npm run build
+        working-directory: client
+
+      ########################################
+      ## SERVER (Node.js backend)
+      ########################################
+      - name: Install server dependencies
+        run: npm install
+        working-directory: server
+
+      - name: Build server
+        run: npm run build
+        working-directory: server
+
+      ########################################
+      ## DEPLOY CLIENT
+      ########################################
+      - name: Deploy client to server
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.HOST }}
           username: ${{ secrets.USER }}
           key: ${{ secrets.SSH_KEY }}
           source: "client/dist/*"
-          target: "/var/www/html/"
+          target: ${{ secrets.CLIENT_DIR }}
           overwrite: true
+          port: 22
+
+      ########################################
+      ## DEPLOY SERVER
+      ########################################
+      - name: Deploy server to server machine
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.USER }}
+          key: ${{ secrets.SSH_KEY }}
+          source: "server/*"
+          target: ${{ secrets.SERVER_DIR }}
+          overwrite: true
+          port: 22
+
+      ########################################
+      ## REINICIAR SERVIDOR NODE (PM2)
+      ########################################
+      - name: Restart Node server with PM2
+        uses: appleboy/ssh-action@v1.1.0
+        with:
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.USER }}
+          key: ${{ secrets.SSH_KEY }}
+          script: |
+            cd ${{ secrets.SERVER_DIR }}
+            pm2 stop server || true
+            pm2 start dist/index.js --name "server"
+            pm2 save
