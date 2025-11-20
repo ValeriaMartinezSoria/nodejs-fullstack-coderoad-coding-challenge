@@ -20,15 +20,16 @@ export default function App(): JSX.Element {
   const [loading, setLoading] = useState<boolean>(false)
 
   useEffect(() => {
-    fetchItems()
+    fetchItems() 
   }, [])
 
   async function fetchItems(): Promise<void> {
     setLoading(true)
     try {
       const res = await fetch(`${API}/items`)
-      const data = await res.json()
-      setItems(data)
+      const result = await res.json();
+      const { data } = result;
+      setItems(data);
     } catch (err) {
       console.error(err)
     } finally {
